@@ -11,6 +11,9 @@ import time
 import hmac
 import time
 
+__import__('pysqlite3')
+import sys
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
 
 os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
 #openai.api_key  = os.environ['OPENAI_API_KEY']

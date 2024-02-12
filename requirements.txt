@@ -98,7 +98,7 @@ onnxruntime==1.16.0
 openai==1.12.0
 openpyxl==3.0.10
 overrides==7.4.0
-packaging==23.1
+packaging==23.2
 pandas==2.1.1
 pandocfilters==1.5.0
 parso==0.8.3

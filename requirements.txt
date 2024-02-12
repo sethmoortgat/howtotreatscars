@@ -33,6 +33,7 @@ debugpy==1.8.0
 decorator==5.1.1
 defusedxml==0.7.1
 dill==0.3.7
+distro==1.9.0
 entrypoints==0.4
 et-xmlfile==1.1.0
 executing==1.2.0
@@ -47,7 +48,9 @@ GitPython==3.1.37
 google-search-results==2.4.2
 greenlet==2.0.2
 h11==0.14.0
+httpcore==1.0.2
 httptools==0.6.0
+httpx==0.26.0
 huggingface-hub==0.16.4
 humanfriendly==10.0
 idna==3.4
@@ -60,6 +63,7 @@ isort==5.12.0
 jedi==0.19.0
 Jinja2==3.1.2
 json5==0.9.14
+jsonpatch==1.33
 jsonpointer==2.1
 jsonschema==4.19.1
 jsonschema-specifications==2023.7.1
@@ -71,6 +75,7 @@ jupyterlab-pygments==0.2.2
 jupyterlab_server==2.24.0
 langchain==0.0.283
 langchain-community==0.0.19
+langchain-core==0.1.22
 langchain-openai==0.0.5
 langsmith==0.0.87
 lazy-object-proxy==1.9.0
@@ -146,6 +151,7 @@ streamlit==1.27.1
 sympy==1.12
 tenacity==8.2.3
 terminado==0.17.1
+tiktoken==0.5.2
 tinycss2==1.2.1
 tokenizers==0.14.0
 toml==0.10.2
@@ -172,4 +178,3 @@ websockets==11.0.3
 wrapt==1.15.0
 yarl==1.9.2
 zipp==3.17.0
-pysqlite3-binary

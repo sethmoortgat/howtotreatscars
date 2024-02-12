@@ -1,21 +1,24 @@
 from langchain_community.vectorstores import Chroma
 from langchain.chains import LLMChain
 from langchain.prompts import PromptTemplate
-from langchain_openai import OpenAI, ChatOpenAI
+from langchain_openai import OpenAI, ChatOpenAI, OpenAIEmbeddings
 
 import streamlit as st
 import os
 import openai
+from openai import OpenAI
 import time
 import hmac
+import time
 
 
 os.environ["OPENAI_API_KEY"] = st.secrets["openai_api_key"]
-openai.api_key  = os.environ['OPENAI_API_KEY']
+#openai.api_key  = os.environ['OPENAI_API_KEY']
 
 
 
-def get_completion_from_messages(messages, model="gpt-3.5-turbo-1106", temperature=0):
+
+def get_completion_from_messages(messages, client, model="gpt-3.5-turbo-1106", temperature=0.1):
 	"""
 	Input takes a n array of messages that specify a set of prompts and associated roles
 	for example:
@@ -31,24 +34,76 @@ def get_completion_from_messages(messages, model="gpt-3.5-turbo-1106", temperatu
 	model output message from the output.
 	"""
 
-	response = openai.ChatCompletion.create(
-		model=model,
-		messages=messages,
-		temperature=temperature, # this is the degree of randomness of the model's output
+	response = client.chat.completions.create(
+    	messages=messages,
+    	model=model,
+    	temperature=temperature
 	)
 
-	# This is how you can get the number of tokens from the response
-	# token_dict = {
-	# 	'prompt_tokens':response['usage']['prompt_tokens'],
-	# 	'completion_tokens':response['usage']['completion_tokens'],
-	# 	'total_tokens':response['usage']['total_tokens'],
-	# 	}
-	#     
-	return response.choices[0].message # , token_dict
+	return response.choices[0].message 
+
+
+system_message = """
+You are a friendly assistant that helps people who are browsing a website with information on scar treatments.
+You are polite, provide extensive accurate answers, and point the user to the right location for more information.
+"""
+
+template = """
+You are a friendly assistant that helps people who are browsing a website with information on scar treatments.
+You are polite, provide extensive accurate answers, and point the user to the right location for more information.
+
+You have to answer a question that you find below, but only using information in the context below.
+Do not use any other information and make sure your answer is almost an exact copy of the relevant text in the context.
+The provided context in split in different chunks of information delimited by triple '#', and at the end of each
+piece of context you find a urls where the info is retrieved from. You are allowed to combine information from
+different parts of the context into one consistent and complete answer
+
+If the question is completely unrelated to the treatment of scars, do NOT make up an answer but instead reply with:
+'Sorry, this information can not be found on the website.'
+
+If you give an answer, end your answer by stating on which website this info can be found, which is given at the end of each piece of context.
+Make sure to give the entire link, starting with 'https:'
+You are also allowed to give multiple URLs.
+
+After providing your first answer, you are allowed to answer any follow-up questions related to the initial question.
+
+Question: {question}
+Context: {context}
+"""	
+
+def get_context_from_db(
+    query,
+    vectorstore,
+    n_retrieve=3
+):
+    querybase = vectorstore.as_retriever(search_type="mmr", search_kwargs={"k":n_retrieve, "lambda_mult":0.6})
+    res = querybase.get_relevant_documents(query)
+    
+    final_answer = ""
+    for i in res:
+        summary = "###\n"+ i.page_content + "\n This info was retrieved from: " + i.metadata["source"] + "\n###\n"
+        final_answer+=summary
+        
+    return final_answer
 
 
 
-	
+
+def get_response(
+	prompt_template,
+	question,
+	context,
+	model,
+	api_key,
+	temp = 0.1,
+):
+	prompt = PromptTemplate.from_template(template)
+	llm = ChatOpenAI(model=model,
+                       temperature=temp,
+                       openai_api_key=api_key)
+	llm_chain = LLMChain(prompt=prompt, llm=llm)
+	answer = llm_chain.invoke({"question":question,"context":context})
+	return answer["text"]
 
 def main():
 
@@ -85,25 +140,44 @@ def main():
 	
 	st.sidebar.title("Menu")
 	
-	def show_conversation():
-		with st.session_state.conversation_box:
-			for message in st.session_state.messages:
-				if message["role"]=="system": continue
-				else: 
-					with st.chat_message(message["role"]): st.write(message["content"])
 	
 	
 	def new_question():
 		st.session_state.new_question = True
+		st.session_state.question = ''
+		st.session_state.context = ''
 	
 	def existing_question():
 		st.session_state.new_question = False
 	
+	def add_user_input():
+		st.session_state.messages.append({'role':'user', 'content':st.session_state.chat_input})
+		
+	
+	if "question" not in st.session_state.keys():
+		st.session_state.question = ''
+	
+	if "context" not in st.session_state.keys():
+		st.session_state.context = ''
+	
 	if "new_question" not in st.session_state.keys():
 		st.session_state.new_question = True
 	
+	if "embedding_function" not in st.session_state.keys():
+		st.session_state.embedding_function = OpenAIEmbeddings(openai_api_key=st.secrets["openai_api_key"])
+	
 	if "vector_store" not in st.session_state.keys():
-		st.session_state.vectorstore = Chroma(persist_directory="./chroma_db")
+		st.session_state.vectorstore = Chroma(persist_directory="./chroma_db",
+			embedding_function = st.session_state.embedding_function)
+	
+	if "client" not in st.session_state.keys():
+		st.session_state.client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+
+	
+	if "messages" not in st.session_state.keys():
+		st.session_state.messages = [  
+			#{'role':'system', 'content':system_message},
+		] 
 		
 	st.sidebar.button("New question", on_click=new_question)
 	
@@ -118,12 +192,40 @@ def main():
 	st.title("[HowToTreatScars](https://howtotreatscars.com/)")
 	st.image('./banner2.jpg')
 	
-	
+
 	if st.session_state.new_question:	
-		st.button("New question YES", on_click=existing_question)
+		st.text_input('Ask your question:',key='question', on_change=existing_question)
+		
 		
 	else:
-		st.chat_input("Enter your message", on_submit=new_question, key="chat_input")
+		if len(st.session_state.messages) == 0:
+			st.session_state.context = get_context_from_db(
+				st.session_state.question,
+				st.session_state.vectorstore,
+				n_retrieve=3
+			)
+			question_prompt = PromptTemplate.from_template(template).format(
+				question = st.session_state.question,
+				context = st.session_state.context)
+			st.session_state.messages.append({'role':'system', 'content':question_prompt})
+		# answer = get_response(
+# 			prompt_template = template,
+# 			question = st.session_state.question,
+# 			context = st.session_state.context,
+# 			model=st.session_state.model_value,
+# 			api_key = st.secrets["openai_api_key"],
+# 			temp = 0.1,
+# 		)
+		answer = get_completion_from_messages(st.session_state.messages, st.session_state.client, model=st.session_state.model_value, temperature=0.1)
+		st.session_state.messages.append({'role':answer.role, 'content':answer.content})
+	
+		with st.container():
+			for idx, message in enumerate(st.session_state.messages):
+				if message["role"]=="system": continue
+				else: 
+					with st.chat_message(message["role"]): st.write(message["content"])
+		st.chat_input("Enter your message", key="chat_input", on_submit = add_user_input)
+
 
 		
 	

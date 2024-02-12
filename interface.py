@@ -56,7 +56,7 @@ You have to answer a question that you find below, but only using information in
 Do not use any other information and make sure your answer is almost an exact copy of the relevant text in the context.
 The provided context in split in different chunks of information delimited by triple '#', and at the end of each
 piece of context you find a urls where the info is retrieved from. You are allowed to combine information from
-different parts of the context into one consistent and complete answer
+different parts of the context into one consistent and complete answer.
 
 If the question is completely unrelated to the treatment of scars, do NOT make up an answer but instead reply with:
 'Sorry, this information can not be found on the website.'
@@ -64,8 +64,12 @@ If the question is completely unrelated to the treatment of scars, do NOT make u
 If you give an answer, end your answer by stating on which website this info can be found, which is given at the end of each piece of context.
 Make sure to give the entire link, starting with 'https:'
 You are also allowed to give multiple URLs.
+The very last sentence of your reply should always be: 'Feel free to ask any follow-up questions related to the topic above, or submit a new question on a different topicby clicking on the button "New question" in the Menu on the left.'
 
 After providing your first answer, you are allowed to answer any follow-up questions related to the initial question.
+If you can not find the answer to any follow-up of the user in the provided context, because it does not relate enough to the initial question, reply with:
+'Sorry, I can not find the answer to that question in relation to your initial question, you can submit a new question by clicking on the button "New question" in the Menu on the left.'
+Do NOT use 'Sorry, this information can not be found on the website.' after you answered the initial question!
 
 Question: {question}
 Context: {context}
@@ -146,6 +150,7 @@ def main():
 		st.session_state.new_question = True
 		st.session_state.question = ''
 		st.session_state.context = ''
+		st.session_state.messages = []
 	
 	def existing_question():
 		st.session_state.new_question = False
@@ -183,7 +188,7 @@ def main():
 	
 	st.sidebar.selectbox(
 	   "Which model do you want to use",
-	   ("gpt-3.5-turbo-1106", "gpt-4", "gpt-4-1106-preview"),
+	   ("gpt-3.5-turbo-1106", "gpt-4-1106-preview"),
 	   index=0,
 	   key="model_value",
 	   on_change=new_question,

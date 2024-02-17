@@ -47,9 +47,31 @@ def get_completion_from_messages(messages, client, model="gpt-3.5-turbo-1106", t
 	return response.choices[0].message 
 
 
-system_message = """
+template_after_summary = """
 You are a friendly assistant that helps people who are browsing a website with information on scar treatments.
 You are polite, provide extensive accurate answers, and point the user to the right location for more information.
+
+You have to answer a question that you find below, but only using information that is given to you as 'context'.
+Do not use any other information and make sure your answer is almost an exact copy of the relevant text in the context.
+The provided context in split in different chunks of information delimited by triple '#', and at the end of each
+piece of context you find a urls where the info is retrieved from. You are allowed to combine information from
+different parts of the context into one consistent and complete answer.
+
+If the question is completely unrelated to the treatment of scars, do NOT make up an answer but instead reply with:
+'Sorry, this information can not be found on the website.'
+If the user did not really ask a question at all, remain polite and answer adequately, but focus on reminding the user you are here
+to answer any question related to the website 'howtotreatscars.com'.
+
+If you give an answer, end your answer by stating on which website this info can be found, which is given at the end of each piece of context.
+Make sure to give the entire link, starting with 'https:'
+You are also allowed to give multiple URLs.
+
+There is already a history of the conversation, which is given below between triple quotes:
+
+history of the conversation:
+'''
+{history}
+'''
 """
 
 template = """
@@ -64,6 +86,8 @@ different parts of the context into one consistent and complete answer.
 
 If the question is completely unrelated to the treatment of scars, do NOT make up an answer but instead reply with:
 'Sorry, this information can not be found on the website.'
+If the user did not really ask a question at all, remain polite and answer adequately, but focus on reminding the user you are here
+to answer any question related to the website 'howtotreatscars.com'.
 
 If you give an answer, end your answer by stating on which website this info can be found, which is given at the end of each piece of context.
 Make sure to give the entire link, starting with 'https:'
@@ -81,6 +105,20 @@ However, if the questions seems somewhat unrelated, please prioritise this new c
 
 Additional Context: {context}
 """	
+
+summarize_template = """
+Your task is to summarize the history of a given conversation, where a website vistor has been asking questions
+about a website and the website owner is providing answers based on context retrieved from that website.
+You have to give an extensive summary, making sure the different questions that were posed are not lost, 
+but also omitting any context or information that was not useful to the questions and answers provived.
+
+The conversation is given below between triple hashtags. It contains parts mentioned by the visitor (called 'user'),
+parts mentioned by the website owner (called 'assistant') and general pieces of context (referred to as 'system')
+
+Conversation: ###
+{conversation}
+###
+"""
 
 def get_context_from_db(
     query,
@@ -151,20 +189,42 @@ def main():
 	
 	st.sidebar.title("Menu")
 	
-	
+	def summarize_chat_history(
+		chat_history,
+		summarization_template,
+	):
+		concatenated_message = ""
+		# concatenate message history:
+		for entry in chat_history:
+			concatenated_message += entry["role"]
+			concatenated_message += ":\n"
+			concatenated_message += entry["content"]
+			concatenated_message += ":\n\n"
+		full_prompt = PromptTemplate.from_template(summarization_template).format(
+				conversation = concatenated_message)
+		answer = get_completion_from_messages([{'role':'user', 'content':full_prompt}], 
+				st.session_state.client, model=st.session_state.model_value, temperature=0.1)
+		return answer
+		
 	
 	def new_question():
 		st.session_state.new_question = True
 		st.session_state.question = ''
 		st.session_state.context = ''
 		st.session_state.messages = []
+		st.session_state.chat_history = []
+		st.session_state.n_questions = 0
 	
 	def existing_question():
 		st.session_state.new_question = False
 	
 	def add_user_input():
 		st.session_state.messages.append({'role':'user', 'content':st.session_state.chat_input})
+		st.session_state.chat_history.append({'role':'user', 'content':st.session_state.chat_input})
 		
+		
+	if "n_questions" not in st.session_state.keys():
+		st.session_state.n_questions = 0
 	
 	if "question" not in st.session_state.keys():
 		st.session_state.question = ''
@@ -185,11 +245,11 @@ def main():
 	if "client" not in st.session_state.keys():
 		st.session_state.client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
-	
 	if "messages" not in st.session_state.keys():
-		st.session_state.messages = [  
-			#{'role':'system', 'content':system_message},
-		] 
+		st.session_state.messages = [] 
+	
+	if "chat_history" not in st.session_state.keys():
+		st.session_state.chat_history = [] 
 		
 	st.sidebar.button("New question", on_click=new_question)
 	
@@ -213,6 +273,7 @@ def main():
 		
 		if len(st.session_state.messages) == 0:
 			st.session_state.messages.append({'role':'user', 'content':st.session_state.question})
+			st.session_state.chat_history.append({'role':'user', 'content':st.session_state.question})
 			st.session_state.context = get_context_from_db(
 				st.session_state.question,
 				st.session_state.vectorstore,
@@ -222,6 +283,7 @@ def main():
 				question = st.session_state.question,
 				context = st.session_state.context)
 			st.session_state.messages.append({'role':'system', 'content':question_prompt})
+			st.session_state.chat_history.append({'role':'system', 'content':question_prompt})
 		
 		else:
 			last_question = st.session_state.messages[-1]["content"]
@@ -233,17 +295,30 @@ def main():
 			follow_up_question_prompt = PromptTemplate.from_template(follow_up_template).format(
 				context = follow_up_context)
 			st.session_state.messages.append({'role':'system', 'content':follow_up_question_prompt})
-			
+			st.session_state.chat_history.append({'role':'system', 'content':follow_up_question_prompt})
 			
 		answer = get_completion_from_messages(st.session_state.messages, st.session_state.client, model=st.session_state.model_value, temperature=0.1)
 		st.session_state.messages.append({'role':answer.role, 'content':answer.content})
-	
+		st.session_state.chat_history.append({'role':answer.role, 'content':answer.content})
+		
+		st.session_state.n_questions += 1
+		# in case already more than 3 questions got asked, summarize history and start with new system prompt
+		if st.session_state.n_questions%3 == 0:
+			summary = summarize_chat_history(st.session_state.messages,summarize_template)
+			summary_of_history_template = PromptTemplate.from_template(template_after_summary).format(
+				history = summary.content)
+			st.session_state.messages = [{'role':"system", 'content':summary_of_history_template}]
+		
+			
+		# show the chat history on screen
 		with st.container():
-			for idx, message in enumerate(st.session_state.messages):
+			for idx, message in enumerate(st.session_state.chat_history):
 				if message["role"]=="system": continue
 				else: 
 					with st.chat_message(message["role"]): st.write(message["content"])
-		st.chat_input("Enter your message", key="chat_input", on_submit = add_user_input)
+		
+		# show the bar to enter a new question
+		st.chat_input("Enter your next question...", key="chat_input", on_submit = add_user_input)
 
 
 		

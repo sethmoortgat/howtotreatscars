@@ -10,6 +10,7 @@ from openai import OpenAI
 import time
 import hmac
 import time
+from copy import deepcopy
 
 __import__('pysqlite3')
 import sys
@@ -67,15 +68,16 @@ If the question is completely unrelated to the treatment of scars, do NOT make u
 If you give an answer, end your answer by stating on which website this info can be found, which is given at the end of each piece of context.
 Make sure to give the entire link, starting with 'https:'
 You are also allowed to give multiple URLs.
-The very last sentence of your reply should always be: 'Feel free to ask any follow-up questions related to the topic above, or submit a new question on a different topicby clicking on the button "New question" in the Menu on the left.'
-
-After providing your first answer, you are allowed to answer any follow-up questions related to the initial question.
-If you can not find the answer to any follow-up of the user in the provided context, because it does not relate enough to the initial question, reply with:
-'Sorry, I can not find the answer to that question in relation to your initial question, you can submit a new question by clicking on the button "New question" in the Menu on the left.'
-Do NOT use 'Sorry, this information can not be found on the website.' after you answered the initial question!
 
 Question: {question}
 Context: {context}
+"""	
+
+
+follow_up_template = """
+A new question has been asked, you can find below some additional context that might be helpful.
+
+Additional Context: {context}
 """	
 
 def get_context_from_db(
@@ -206,7 +208,9 @@ def main():
 		
 		
 	else:
+		
 		if len(st.session_state.messages) == 0:
+			st.session_state.messages.append({'role':'user', 'content':st.session_state.question})
 			st.session_state.context = get_context_from_db(
 				st.session_state.question,
 				st.session_state.vectorstore,
@@ -216,14 +220,19 @@ def main():
 				question = st.session_state.question,
 				context = st.session_state.context)
 			st.session_state.messages.append({'role':'system', 'content':question_prompt})
-		# answer = get_response(
-# 			prompt_template = template,
-# 			question = st.session_state.question,
-# 			context = st.session_state.context,
-# 			model=st.session_state.model_value,
-# 			api_key = st.secrets["openai_api_key"],
-# 			temp = 0.1,
-# 		)
+		
+		else:
+			last_question = st.session_state.messages[-1]["content"]
+			follow_up_context = get_context_from_db(
+				last_question,
+				st.session_state.vectorstore,
+				n_retrieve=1
+			)
+			follow_up_question_prompt = PromptTemplate.from_template(follow_up_template).format(
+				context = follow_up_context)
+			st.session_state.messages.append({'role':'system', 'content':follow_up_question_prompt})
+			
+			
 		answer = get_completion_from_messages(st.session_state.messages, st.session_state.client, model=st.session_state.model_value, temperature=0.1)
 		st.session_state.messages.append({'role':answer.role, 'content':answer.content})
 	

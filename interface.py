@@ -203,7 +203,7 @@ def main():
 		full_prompt = PromptTemplate.from_template(summarization_template).format(
 				conversation = concatenated_message)
 		answer = get_completion_from_messages([{'role':'user', 'content':full_prompt}], 
-				st.session_state.client, model=st.session_state.model_value, temperature=0.1)
+				st.session_state.client, model="gpt-3.5-turbo-1106", temperature=0.1)
 		return answer
 		
 	

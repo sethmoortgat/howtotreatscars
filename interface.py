@@ -76,6 +76,8 @@ Context: {context}
 
 follow_up_template = """
 A new question has been asked, you can find below some additional context that might be helpful.
+If the question is related to some of the previous questions of the user, you can use previous context as well.
+However, if the questions seems somewhat unrelated, please prioritise this new context to answer it.
 
 Additional Context: {context}
 """	
@@ -226,7 +228,7 @@ def main():
 			follow_up_context = get_context_from_db(
 				last_question,
 				st.session_state.vectorstore,
-				n_retrieve=1
+				n_retrieve=2
 			)
 			follow_up_question_prompt = PromptTemplate.from_template(follow_up_template).format(
 				context = follow_up_context)

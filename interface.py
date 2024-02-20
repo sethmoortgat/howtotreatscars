@@ -184,10 +184,13 @@ def main():
 		st.stop()  # Do not continue if check_password is not True.
 	
 	
+	
+
+	
+	
+	
 	st.set_page_config(layout="wide") 
 	
-	
-	st.sidebar.title("Menu")
 	
 	def summarize_chat_history(
 		chat_history,
@@ -250,8 +253,23 @@ def main():
 	
 	if "chat_history" not in st.session_state.keys():
 		st.session_state.chat_history = [] 
-		
-	st.sidebar.button("New question", on_click=new_question)
+	
+	st.markdown(
+    """
+	<style>
+	button {
+		height: auto;
+		padding-top: 15px !important;
+		padding-bottom: 15px !important;
+	}
+	</style>
+	""",
+		unsafe_allow_html=True,
+	)
+	
+	#st.sidebar.title("Menu")
+	st.sidebar.image('./logo.png')	
+	st.sidebar.button("New question", on_click=new_question, type="primary")
 	
 	st.sidebar.selectbox(
 	   "Which model do you want to use",
@@ -261,12 +279,27 @@ def main():
 	   on_change=new_question,
 	)
 	
-	st.title("[HowToTreatScars](https://howtotreatscars.com/)")
-	st.image('./banner2.jpg')
+	# st.title("[HowToTreatScars](https://howtotreatscars.com/)")
+	#st.image('./banner2.jpg')
 	
+	info_text = """
+	This is a chatbot powered by ChatGPT. Even though its accuracy and relevance have been thoroughly tested,
+	the responses that are provided should always be validated against the true content of [howtotreatscars.com](https://howtotreatscars.com/).
+	"""
+	st.info(info_text,icon="ℹ️")
 
 	if st.session_state.new_question:	
-		st.text_input('Ask your question:',key='question', on_change=existing_question)
+		label = 'Ask your question:'
+		st.text_input(label, key='question', on_change=existing_question)
+		st.components.v1.html(
+			f"""
+			<script>
+				var elems = window.parent.document.querySelectorAll('div[class*="stTextInput"] p');
+				var elem = Array.from(elems).find(x => x.innerText == '{label}');
+				elem.style.fontSize = '20px'; // the fontsize you want to set it to
+			</script>
+			"""
+		)
 		
 		
 	else:
@@ -315,7 +348,9 @@ def main():
 			for idx, message in enumerate(st.session_state.chat_history):
 				if message["role"]=="system": continue
 				else: 
-					with st.chat_message(message["role"]): st.write(message["content"])
+					if message["role"]=="assistant":icon="./icon_self.png"
+					else: icon="./user.png"
+					with st.chat_message(message["role"],avatar=icon): st.write(message["content"])
 		
 		# show the bar to enter a new question
 		st.chat_input("Enter your next question...", key="chat_input", on_submit = add_user_input)
